@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Solar Freezer Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f0f4f8;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    .status-dot {
+      height: 12px;
+      width: 12px;
+      background-color: red;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .online {
+      background-color: green;
+    }
+    .data-box {
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      margin: 20px auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      max-width: 500px;
+    }
+    canvas {
+      width: 100%;
+      max-width: 600px;
+      margin: 20px auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔋 Solar Freezer Dashboard <span class="status-dot" id="statusDot"></span></h1>
+
+  <div class="data-box">
+    <p><strong>Voltage:</strong> <span id="voltage">--</span> V</p>
+    <p><strong>Current:</strong> <span id="current">--</span> A</p>
+    <p><strong>Power:</strong> <span id="power">--</span> W</p>
+    <p><strong>Charging Current:</strong> <span id="charging">--</span> A</p>
+    <p><strong>kWh:</strong> <span id="kwh">--</span> kWh</p>
+    <button onclick="toggleRelay()">Toggle Freezer</button>
+    <p>Relay Status: <span id="relayStatus">OFF</span></p>
+  </div>
+
+  <canvas id="voltageChart"></canvas>
+  <canvas id="powerChart"></canvas>
+
+  <script>
+    const statusDot = document.getElementById('statusDot');
+    const ws = new WebSocket(`ws://${location.host}`);
+
+    const voltageData = [];
+    const powerData = [];
+    const labels = [];
+
+    let relayState = false;
+
+    function toggleRelay() {
+      relayState = !relayState;
+      const cmd = relayState ? "relay_on" : "relay_off";
+      ws.send(JSON.stringify({ cmd }));
+      document.getElementById('relayStatus').innerText = relayState ? "ON" : "OFF";
+    }
+
+    ws.onopen = () => statusDot.classList.add('online');
+    ws.onclose = () => statusDot.classList.remove('online');
+
+    ws.onmessage = event => {
+      const data = JSON.parse(event.data);
+      document.getElementById('voltage').innerText = data.voltage.toFixed(2);
+      document.getElementById('current').innerText = data.current.toFixed(2);
+      document.getElementById('power').innerText = data.power.toFixed(2);
+      document.getElementById('charging').innerText = data.chargingCurrent.toFixed(2);
+      document.getElementById('kwh').innerText = data.kwh.toFixed(4);
+
+      const time = new Date().toLocaleTimeString();
+      voltageData.push(data.voltage);
+      powerData.push(data.power);
+      labels.push(time);
+
+      if (voltageData.length > 20) {
+        voltageData.shift();
+        powerData.shift();
+        labels.shift();
+      }
+
+      voltageChart.update();
+      powerChart.update();
+    };
+
+    const voltageChart = new Chart(document.getElementById('voltageChart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Voltage (V)',
+          data: voltageData,
+          borderColor: 'blue',
+          fill: false
+        }]
+      }
+    });
+
+    const powerChart = new Chart(document.getElementById('powerChart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Power (W)',
+          data: powerData,
+          borderColor: 'orange',
+          fill: false
+        }]
+      }
+    });
+  </script>
+</body>
+</html>
